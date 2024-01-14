@@ -10,20 +10,20 @@
 #include <unordered_map>
 #include <utility>
 
+#include "Metadata.hpp"
+
 class Decoder {
 public:
-    Decoder(const long long number_of_symbols_in_message, const long long frequency_sum, const long state,
-            const std::map<char, long long>& frequencies,
-            const std::unordered_map<char, std::pair<long long, long long>>& intervals)
-        : number_of_symbols_in_message(number_of_symbols_in_message),
-          frequency_sum(frequency_sum),
-          state(state),
-          frequencies(frequencies),
-          intervals(intervals) {
+    Decoder(long long state, Metadata& metadata)
+        : state(state),
+          number_of_symbols_in_message(metadata.get_number_of_symbols()),
+          frequency_sum(metadata.get_frequencies_sum()),
+          frequencies(metadata.get_frequencies()),
+          intervals(metadata.get_intervals()) {
     }
 
     std::string decode() {
-        std::string string;
+        std::string string = "";
         for (int i = 0; i < number_of_symbols_in_message; ++i) {
             string += decode_step();
         }
@@ -32,13 +32,13 @@ public:
     }
 
 private:
-    const long long number_of_symbols_in_message;
+    const size_t number_of_symbols_in_message;
     const long long frequency_sum;
-    long state;
-    std::map<char, long long> frequencies;
-    std::unordered_map<char, std::pair<long long, long long>> intervals;
+    long long state;
+    std::map<char, long long>& frequencies;
+    std::map<char, std::pair<long long, long long>>& intervals;
 
-    const std::pair<char, std::pair<long long, long long>>& get_interval(const long long r) const {
+       std::pair<char, std::pair<long long, long long>> get_interval(const long long r) const {
         for (auto& char_interval: intervals) {
             const auto& interval = char_interval.second;
             if (interval.first <= r && r <= interval.second) {
@@ -48,11 +48,11 @@ private:
         throw std::runtime_error("There must be always an interval fo char!");
     }
 
-    const char& decode_step() {
+    char decode_step() {
         const long long d = state / frequency_sum;
         const long long r = state % frequency_sum;
         const auto& interval = get_interval(r);
-        const char& character = interval.first;
+        const char character = interval.first;
         state = d * frequencies[character] + r - interval.second.first;
         return character;
     }

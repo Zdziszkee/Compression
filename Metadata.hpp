@@ -5,11 +5,10 @@
 #ifndef METADATA_HPP
 #define METADATA_HPP
 #include <string>
-#include <unordered_map>
 
 class Metadata {
-    std::unordered_map<char, long long> frequencies;
-    std::unordered_map<char, std::pair<long long, long long>> intervals;
+    std::map<char, long long> frequencies;
+    std::map<char, std::pair<long long, long long>> intervals;
     long long frequencies_sum = 0;
     size_t number_of_symbols = 0;
 
@@ -29,11 +28,11 @@ public:
         }
     }
 
-    const std::unordered_map<char, long long>& get_frequencies() const {
+      std::map<char, long long>& get_frequencies()  {
         return frequencies;
     }
 
-    const std::unordered_map<char, std::pair<long long, long long>>& get_intervals() const {
+     std::map<char, std::pair<long long, long long>>& get_intervals()  {
         return intervals;
     }
 

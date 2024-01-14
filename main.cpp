@@ -31,10 +31,13 @@ int main(int arguments_size, char** arguments) {
 
     Metadata metadata(file_contents);
 
-    Encoder encoder(file_contents);
+    Encoder encoder(file_contents, metadata);
     long long encoded = encoder.encode();
-    std::cout << encoded << std::endl;
+    std::cout << "Encoded: " << encoded << std::endl;
 
-    Decoder decoder()
+    Decoder decoder(encoded, metadata);
+    auto decoded = decoder.decode();
+    std::cout << "Decoded: " << decoded << std::endl;
+
     return 0;
 }
