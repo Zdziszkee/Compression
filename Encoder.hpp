@@ -17,6 +17,10 @@ class Encoder {
     long long frequencies_sum = 0;
     long long state = 0;
 
+    const long long t = 1;
+    long long l;
+    long long h;
+
     void encode_step(const char& character) {
         state = state / frequencies[character] * frequencies_sum + intervals[character].first + state % frequencies[
                     character];
@@ -28,9 +32,11 @@ public:
           frequencies(metadata.get_frequencies()),
           intervals(metadata.get_intervals()),
           frequencies_sum(metadata.get_frequencies_sum()) {
+        l = frequencies_sum * t;
+        h = 2 * frequencies_sum * t - 1;
     }
 
-     long long encode() {
+    long long encode() {
         for (const char& character: input) {
             encode_step(character);
         }
