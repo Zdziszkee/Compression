@@ -12,18 +12,13 @@
 
 class Encoder {
     const std::string& input;
-    std::map<char, long long>& frequencies;
-    std::map<char, std::pair<long long, long long>>& intervals;
-    long long frequencies_sum = 0;
-    long long state = 0;
-
-    const long long t = 1;
-    long long l;
-    long long h;
+    std::map<char, unsigned long long>& frequencies;
+    std::map<char, std::pair<unsigned long long, unsigned long long>>& intervals;
+    unsigned long long frequencies_sum = 0;
+    unsigned long long state = 0;
 
     void encode_step(const char& character) {
-        state = state / frequencies[character] * frequencies_sum + intervals[character].first + state % frequencies[
-                    character];
+        state = state / frequencies[character] * frequencies_sum + intervals[character].first + state % frequencies[character];
     }
 
 public:
@@ -32,11 +27,9 @@ public:
           frequencies(metadata.get_frequencies()),
           intervals(metadata.get_intervals()),
           frequencies_sum(metadata.get_frequencies_sum()) {
-        l = frequencies_sum * t;
-        h = 2 * frequencies_sum * t - 1;
     }
 
-    long long encode() {
+     unsigned long long encode() {
         for (const char& character: input) {
             encode_step(character);
         }
