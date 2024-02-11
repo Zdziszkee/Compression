@@ -11,12 +11,13 @@
 
 class Decoder {
 public:
-    Decoder(unsigned long long state, Metadata& metadata)
-        : state(state),
+    Decoder(std::vector<bool>& bits, unsigned long long state, Metadata& metadata)
+        : bits(bits), state(state),
           number_of_symbols_in_message(metadata.get_number_of_symbols()),
           frequency_sum(metadata.get_frequencies_sum()),
           frequencies(metadata.get_frequencies()),
-          intervals(metadata.get_intervals()) {
+          intervals(metadata.get_intervals()),
+          decoding_table(metadata.decoding_table) {
     }
 
     std::string decode() {
@@ -33,6 +34,8 @@ private:
     unsigned long long state;
     std::map<char, unsigned long long>& frequencies;
     std::map<char, std::pair<unsigned long long, unsigned long long>>& intervals;
+    std::vector<bool> bits;
+    std::map<unsigned long long, Metadata::DecodingData> decoding_table;
 
     std::pair<char, std::pair<unsigned long long, unsigned long long>> get_interval(const unsigned long long r) {
         for (auto& char_interval: intervals) {
@@ -45,11 +48,24 @@ private:
     }
 
     char decode_step() {
-        const unsigned long long d = state / frequency_sum;
-        const unsigned long long r = state % frequency_sum;
-        const auto& interval = get_interval(r);
-        const char character = interval.first;
-        state = d * frequencies[character] + r - interval.second.first;
+        auto decoding_data = decoding_table[state];
+
+        char character = decoding_data.character;
+
+        unsigned long long value = 0;
+        for (unsigned long long i = 0; i < decoding_data.bits; ++i) {
+            if (!bits.empty()) {
+                value = (value << 1) | bits.back();
+                bits.pop_back();
+            }
+        }
+        state = decoding_data.index << decoding_data.bits + value;
+        //
+        // const unsigned long long d = state / frequency_sum;
+        // const unsigned long long r = state % frequency_sum;
+        // const auto& interval = get_interval(r);
+        // const char character = interval.first;
+        // state = d * frequencies[character] + r - interval.second.first;
         return character;
     }
 };
