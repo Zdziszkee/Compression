@@ -12,6 +12,16 @@
 
 
 class Ans {
+    struct DecodingData {
+        char symbol;
+        unsigned bits;
+        unsigned new_state;
+
+        DecodingData(char symbol, unsigned bits, unsigned new_state)
+            : symbol(symbol), bits(bits), new_state(new_state) {
+        }
+    };
+
     std::map<char, unsigned long long> frequencies;
     std::map<char, unsigned long long> frequencies_quantized;
     unsigned long long alphabet_size = 0;
@@ -19,8 +29,12 @@ class Ans {
     unsigned long long L = 1; // range bounds left
     unsigned long long R = 0; // range bound right
     unsigned long long state = 0;
-    std::vector<char> symbols_row;
-    std::map<char, unsigned long long> bits_row;
+    std::vector<char> symbols_sample_distribution;
+    std::map<char, unsigned long long> bit_shifts;
+    std::map<char, unsigned long long> intervals;
+    std::vector<unsigned long long> encoding_table;
+    std::vector<DecodingData> decoding_table;
+
 public:
     std::vector<bool> compress(const std::string& input) {
         for (char character: input) {
@@ -44,25 +58,44 @@ public:
         for (const auto& symbol_frequency: frequencies) {
             char symbol = symbol_frequency.first;
             unsigned long long quantized_frequency = frequencies_quantized[symbol];
-            unsigned long long bits = R - floor(std::log2(quantized_frequency)); //calculating how many times multiply by 2
-            unsigned long long symbol_bits = (bits << r) - (quantized_frequency << bits);
-            bits_row[symbol] = symbol_bits;
+            unsigned long long max_bit_shift = R - floor(std::log2(quantized_frequency));
+            //calculating how many times multiply by 2 is needed
+            unsigned long long bit_shift = (max_bit_shift << r) - (quantized_frequency << max_bit_shift);
+            bit_shifts[symbol] = bit_shift;
         }
 
 
         size_t size = frequencies.size();
+        size_t i = size - 1;
+        for (auto outer_iterator = frequencies_quantized.rbegin(); outer_iterator != frequencies_quantized.rend(); ++
+             outer_iterator) {
+            size_t j = 0;
+            char symbol = outer_iterator->first;
+            unsigned long long frequency = outer_iterator->second;
+            unsigned long long start = -1 * frequency;
 
-        for (size_t i = size - 1; i >= 0; i--) {
-            Pair *current = symbol_data.at(i);
-            char symbol = current->first;
-            int L_r = ls_map[symbol];
-            int start = -1 * L_r;
-            for (int j = 0; j < i; j++) {
-                char symbol_prim = symbol_data.at(j)->first;
-                int L_r_prim = ls_map[symbol_prim];
-                start += L_r_prim;
+            for (auto inner_iterator = frequencies_quantized.begin(); j < i; ++inner_iterator) {
+                start += inner_iterator->second; // Accumulate frequencies
+                j++;
             }
-            symbol_start[symbol] = start;
+
+            intervals[symbol] = start;
+            i--;
+        }
+
+        encoding_table.resize(L);
+        for (int x = L; x < 2 * L; x++) {
+            char s = symbols_sample_distribution[x - L];
+            encoding_table[intervals[s] + (std::map<char, unsigned long long>(frequencies_quantized)[s])++] = x;
+        }
+
+        decoding_table.resize(L);
+        for (int x = 0; x < L; x++) {
+            char symbol = symbols_sample_distribution[x];
+            int frequency = frequencies_quantized[symbol]++;
+            int bits = R - floor(log2(frequency));
+            int new_x = (frequency << bits) - L;
+            decoding_table[x] = DecodingData(symbol, bits, new_x);
         }
     }
 
@@ -92,7 +125,7 @@ public:
     }
 
     void spread() {
-        symbols_row.resize(L);
+        symbols_sample_distribution.resize(L);
         state = L;
         unsigned long long i = 0;
         unsigned long long step = (L >> 1LL) + (L >> 3LL) + 3LL;
@@ -102,7 +135,7 @@ public:
             char symbol = symbol_frequency.first;
             unsigned long long quantized_frequency = frequencies_quantized[symbol];
             for (unsigned long long j = 0; j < quantized_frequency; j++) {
-                symbols_row[i] = symbol;
+                symbols_sample_distribution[i] = symbol;
                 i = (i + step) & mask;
             }
         }

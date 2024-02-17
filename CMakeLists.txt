@@ -5,5 +5,6 @@ add_executable(Compression main.cpp
         Encoder.hpp
         Decoder.hpp
         Metadata.hpp
+        Ans.hpp
         tANS.cpp
-        Ans.hpp)
+)
