@@ -1,10 +1,9 @@
 #include <iostream>
 #include <fstream>
-#include <unordered_map>
+#include <vector>
+#include "Ans.hpp"
 
-#include "Decoder.hpp"
-#include "Encoder.hpp"
-#include "Metadata.hpp"
+
 
 int main(int arguments_size, char** arguments) {
     if (arguments_size != 2) {
@@ -29,15 +28,18 @@ int main(int arguments_size, char** arguments) {
     file.seekg(0, std::ios::beg);
     file_contents.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
-    Metadata metadata(file_contents);
+    Ans ans;
 
-    Encoder encoder(file_contents, metadata);
-    long long encoded = encoder.encode();
-    std::cout << "Encoded: " << encoded << std::endl;
 
-    Decoder decoder(encoded, metadata);
-    auto decoded = decoder.decode();
-    std::cout << "Decoded: " << decoded << std::endl;
+    std::vector<bool> compressed = ans.encode(file_contents);
+    size_t compressed_size = compressed.size();
+    std::cout << "Encoded: " << compressed_size << std::endl;
+    auto decompress = ans.decode(compressed);
+    std::cout<<decompress<<std::endl;
+    auto decompressed_size = (file_contents.size() * 8);
+    std::cout << "Decoded: " << decompressed_size << std::endl;
+
+    std::cout<<"compression ratio: "<<(double)compressed_size/ ((double)decompressed_size );
 
     return 0;
 }

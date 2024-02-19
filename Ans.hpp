@@ -6,6 +6,7 @@
 #define ANS_HPP
 #include <cmath>
 #include <map>
+#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,124 +23,242 @@ class Ans {
         }
     };
 
-    std::map<char, unsigned long long> frequencies;
-    std::map<char, unsigned long long> frequencies_quantized;
-    unsigned long long alphabet_size = 0;
-    unsigned long long number_of_symbols = 0;
-    unsigned long long L = 1; // range bounds left
-    unsigned long long R = 0; // range bound right
-    unsigned long long state = 0;
+    std::map<char, int> frequencies;
+    std::map<char, int> frequencies_quantized;
+    int alphabet_size = 0;
+    int number_of_symbols = 0;
+    int L = 1; // range bounds left
+    int R = 0; // range bound right
+    int starting_state = 0;
     std::vector<char> symbols_sample_distribution;
-    std::map<char, unsigned long long> bit_shifts;
-    std::map<char, unsigned long long> intervals;
-    std::vector<unsigned long long> encoding_table;
-    std::vector<DecodingData> decoding_table;
+    std::map<char, int> bit_shifts;
+    std::map<char, int> intervals;
+    std::vector<int> encoding_table;
+    std::vector<DecodingData*> decoding_table;
 
 public:
-    std::vector<bool> compress(const std::string& input) {
-        for (char character: input) {
-            ++frequencies[character];
+
+
+void set_table_size() {
+    L = 1;
+    R = 0;
+    int vocab_size = frequencies.size();
+
+    while (L < 4 * vocab_size) {
+        L *= 2;
+        R += 1;
+    }
+}
+
+// https://github.com/JarekDuda/AsymmetricNumeralSystemsToolkit/blob/master/ANStoolkit.cpp
+void quantize_probabilities_fast() {
+    int used = 0;
+    char max_proba_symbol;
+    double max_proba = 0;
+    for (const std::pair<char, int> symbol_frequency: frequencies) {
+        std::cout << symbol_frequency.first;
+        char symbol = symbol_frequency.first;
+        double proba = (double) symbol_frequency.second / (double)number_of_symbols;
+        frequencies_quantized[symbol] = std::round(L * proba);
+
+        if (!frequencies_quantized[symbol])
+            frequencies_quantized[symbol]++;
+        used += frequencies_quantized[symbol];
+
+        if (proba > max_proba) {
+            max_proba = proba;
+            max_proba_symbol = symbol;
         }
-        number_of_symbols = input.size();
-        alphabet_size = frequencies.size();
-        /**
-         * Set range to be power of 2, and aprox 4 times larger than alphabet size
-         */
-        while (L < 4 * frequencies.size()) {
-            L *= 2; //maybe just multiply frequencies... ?
-            R += 1;
-        }
-        quantize_probabilities_fast();
-        spread();
+    }
+    std::cout << std::endl;
+    frequencies_quantized[max_proba_symbol] += L - used;
+
+}
 
 
-        unsigned long long r = R + 1;
+void spread() {
+    symbols_sample_distribution.resize(L);
+    starting_state = L;
+    int i = 0;
+    int step = (L >> 1) + (L >> 3) + 3;
+    int mask = L - 1;
 
-        for (const auto& symbol_frequency: frequencies) {
-            char symbol = symbol_frequency.first;
-            unsigned long long quantized_frequency = frequencies_quantized[symbol];
-            unsigned long long max_bit_shift = R - floor(std::log2(quantized_frequency));
-            //calculating how many times multiply by 2 is needed
-            unsigned long long bit_shift = (max_bit_shift << r) - (quantized_frequency << max_bit_shift);
-            bit_shifts[symbol] = bit_shift;
-        }
-
-
-        size_t size = frequencies.size();
-        size_t i = size - 1;
-        for (auto outer_iterator = frequencies_quantized.rbegin(); outer_iterator != frequencies_quantized.rend(); ++
-             outer_iterator) {
-            size_t j = 0;
-            char symbol = outer_iterator->first;
-            unsigned long long frequency = outer_iterator->second;
-            unsigned long long start = -1 * frequency;
-
-            for (auto inner_iterator = frequencies_quantized.begin(); j < i; ++inner_iterator) {
-                start += inner_iterator->second; // Accumulate frequencies
-                j++;
-            }
-
-            intervals[symbol] = start;
-            i--;
-        }
-
-        encoding_table.resize(L);
-        for (int x = L; x < 2 * L; x++) {
-            char s = symbols_sample_distribution[x - L];
-            encoding_table[intervals[s] + (std::map<char, unsigned long long>(frequencies_quantized)[s])++] = x;
-        }
-
-        decoding_table.resize(L);
-        for (int x = 0; x < L; x++) {
-            char symbol = symbols_sample_distribution[x];
-            int frequency = frequencies_quantized[symbol]++;
-            int bits = R - floor(log2(frequency));
-            int new_x = (frequency << bits) - L;
-            decoding_table[x] = DecodingData(symbol, bits, new_x);
+    for (const std::pair<char, int> symbol_frequency: frequencies_quantized) {
+        char symbol = symbol_frequency.first;
+        int L_s = symbol_frequency.second;
+        for (int j = 0; j < L_s; j++) {
+            symbols_sample_distribution[i] = symbol;
+            i = (i + step) & mask;
         }
     }
 
-    void quantize_probabilities_fast() {
-        unsigned long long cummulative_frequency = 0;
-        char max_probability_symbol;
-        double max_probability = 0;
+}
 
-        for (const auto& symbol_frequency: frequencies) {
-            char symbol = symbol_frequency.first;
-            unsigned long long frequency = symbol_frequency.second;
-            double probability = frequency / number_of_symbols;
+void generate_nb_bits() {
+    int r = R + 1;
 
-            frequencies_quantized[symbol] = std::round(L * probability);
-            //put 1 if 0
-            if (!frequencies_quantized[symbol]) {
-                frequencies_quantized[symbol]++;
-            }
-            cummulative_frequency += frequencies_quantized[symbol];
-
-            if (probability > max_probability) {
-                max_probability = probability;
-                max_probability_symbol = symbol;
-            }
-        }
-        frequencies_quantized[max_probability_symbol] += L - cummulative_frequency;
+    for (const std::pair<char, int> symbol_frequency: frequencies_quantized) {
+        char symbol = symbol_frequency.first;
+        int L_s = symbol_frequency.second;
+        int k_s = R - floor(log2(L_s));
+        int nb_val = (k_s << r) - (L_s << k_s);
+        bit_shifts[symbol] = nb_val;
     }
 
-    void spread() {
-        symbols_sample_distribution.resize(L);
-        state = L;
-        unsigned long long i = 0;
-        unsigned long long step = (L >> 1LL) + (L >> 3LL) + 3LL;
-        unsigned long long mask = L - 1;
+}
 
-        for (std::pair<char, unsigned long long> symbol_frequency: frequencies) {
-            char symbol = symbol_frequency.first;
-            unsigned long long quantized_frequency = frequencies_quantized[symbol];
-            for (unsigned long long j = 0; j < quantized_frequency; j++) {
-                symbols_sample_distribution[i] = symbol;
-                i = (i + step) & mask;
-            }
+void generate_start() {
+    int vocab_size = frequencies.size();
+
+    auto outer_iterator = frequencies_quantized.rbegin();
+    for (int i = vocab_size - 1; i >= 0; i--) {
+        char symbol = outer_iterator->first;
+        int L_r = frequencies_quantized[symbol];
+        int start = -1 * L_r;
+        auto inner_iterator = frequencies_quantized.begin();
+        for (int j = 0; j < i; j++) {
+            char symbol_prim = inner_iterator->first;
+            int L_r_prim = frequencies_quantized[symbol_prim];
+            start += L_r_prim;
+            ++inner_iterator;
         }
+        intervals[symbol] = start;
+        ++outer_iterator;
     }
+}
+
+void generate_encoding_table() {
+    std::map<char, int> next = frequencies_quantized;
+    encoding_table.resize(L);
+
+    for (int x = L; x < 2 * L; x++) {
+        char s = symbols_sample_distribution[x - L];
+        encoding_table[intervals[s] + (next[s])++] = x;
+    }
+}
+
+void generate_decoding_table() {
+    std::map<char, int> next = frequencies_quantized;
+    decoding_table.resize(L);
+
+    for (int x = 0; x < L; x++) {
+        char symbol = symbols_sample_distribution[x];
+        int n = next[symbol]++;
+        int nb_bits = R - floor(log2(n));
+        int new_x = (n << nb_bits) - L;
+        DecodingData* t = new DecodingData(symbol, nb_bits, new_x);
+        decoding_table[x] = t;
+    }
+}
+
+int get_extractor(int exp) {
+    return (1 << exp) - 1;
+}
+
+void use_bits(std::vector<bool>& message, int state, int nb_bits) {
+    int n_to_extract = get_extractor(nb_bits);
+    int least_significant_bits = state & n_to_extract;
+
+    for (int i = 0; i < nb_bits; i++, least_significant_bits >>= 1)
+        message.push_back((least_significant_bits & 1));
+}
+
+void output_state(std::vector<bool>& message, int state) {
+    for (int i = 0; i < R + 1; i++, state >>= 1)
+        message.push_back((state & 1));
+}
+
+std::vector<bool> encode(std::string message) {
+    number_of_symbols = message.size();
+    for (char character: message) {
+        frequencies[character] = frequencies[character] + 1;
+    }
+    for (auto pair: frequencies) {
+        std::cout << pair.first;
+        auto make_pair = std::pair(pair.first, (double) pair.second / (double) number_of_symbols);
+    }
+
+    std::cout << std::endl;;
+    create_tables();
+    std::vector<bool> result;
+    int r = R + 1;
+    int state = starting_state;
+    int len = message.length();
+
+    for (int i = 0; i < len; i++) {
+        char symbol = message[i];
+        int nb_bits = (state + bit_shifts[symbol]) >> r;
+        use_bits(result, state, nb_bits);
+        state = encoding_table[intervals[symbol] + (state >> nb_bits)];
+    }
+
+    output_state(result, state);
+    return result;
+}
+
+int read_decoding_state(std::vector<bool>& message) {
+    int r = R + 1;
+    std::vector<bool> state_vec;
+
+    for (int i = 0; i < r; i++) {
+        state_vec.push_back(message.back());
+        message.pop_back();
+    }
+
+    int x_start = bits_to_int(state_vec);
+    return x_start;
+}
+
+int update_decoding_state(std::vector<bool>& message, int nb_bits, int new_x) {
+    int accumulate_threshold = 1;
+    std::vector<bool> state_vec;
+    int x_add;
+
+    for (int i = 0; i < nb_bits; i++) {
+        state_vec.push_back(message.back());
+        message.pop_back();
+    }
+
+    if (state_vec.size() > accumulate_threshold) {
+        x_add = bits_to_int(state_vec);
+    } else {
+        x_add = state_vec.at(0);
+    }
+
+    return new_x + x_add;
+}
+
+void create_tables() {
+    set_table_size();
+    quantize_probabilities_fast();
+    spread();
+    generate_nb_bits();
+    generate_start();
+    generate_encoding_table();
+    generate_decoding_table();
+}
+
+std::string decode(std::vector<bool>& message) {
+    std::string output = "";
+    int x_start = read_decoding_state(message);
+    DecodingData* t = decoding_table.at(x_start - L);
+
+    while (message.size()) {
+        output.push_back(t->symbol);
+        x_start = update_decoding_state(message, t->bits, t->new_state);
+        t = decoding_table.at(x_start);
+    }
+
+    std::reverse(output.begin(), output.end());
+    return output;
+}
+int bits_to_int(std::vector<bool>& bits) {
+    int result = 0;
+    for (bool bit : bits) {
+        result = (result << 1) | bit;
+    }
+    return result;
+}
 };
 
 
