@@ -36,6 +36,7 @@ class Ans {
     std::vector<DecodingData *> decoding_table;
 
 public:
+    //stolen from jarek duda
     void quantize_probabilities_fast() {
         int used = 0;
         char max_proba_symbol;
@@ -59,7 +60,7 @@ public:
         frequencies_quantized[max_proba_symbol] += L - used;
     }
 
-
+//stolen from jarek duda
     void spread() {
         symbols_sample_distribution.resize(L);
         starting_state = L;
@@ -87,7 +88,7 @@ public:
         }
     }
 
-    void generate_start() {
+    void create_symbol_intervals() {
         int vocab_size = static_cast<int>(frequencies.size());
 
         auto outer_iterator = frequencies_quantized.rbegin();
@@ -166,7 +167,7 @@ public:
         quantize_probabilities_fast();
         spread();
         generate_nb_bits();
-        generate_start();
+        create_symbol_intervals();
         generate_encoding_table();
         generate_decoding_table();
 
@@ -195,23 +196,19 @@ public:
     }
 
     static int update_decoding_state(std::vector<bool>& message, int nb_bits, int new_x) {
-        int accumulate_threshold = 1;
-        std::vector<bool> state_vec;
-        int x_add;
-
-        for (int i = 0; i < nb_bits; i++) {
-            state_vec.push_back(message.back());
-            message.pop_back();
+        if (nb_bits > message.size()) {
+            nb_bits = static_cast<int>(message.size()); // Prevent out-of-bounds access
         }
 
-        if (state_vec.size() > accumulate_threshold) {
-            x_add = bits_to_int(state_vec);
-        } else {
-            x_add = state_vec.at(0);
+        int x_add = 0;
+        for (int i = 0; i < nb_bits; i++) {
+            x_add = (x_add << 1) | message.back();
+            message.pop_back();
         }
 
         return new_x + x_add;
     }
+
 
 
     std::string decode(std::vector<bool>& message) {
