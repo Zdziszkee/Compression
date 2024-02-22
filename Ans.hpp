@@ -13,11 +13,11 @@
 class Ans {
     struct DecodingData {
         char symbol;
-        int bits;
+        int max_bit_shift;
         int new_state;
 
-        DecodingData(char symbol, int bits, int new_state)
-            : symbol(symbol), bits(bits), new_state(new_state) {
+        DecodingData(char symbol, int max_bit_shift, int new_state)
+            : symbol(symbol), max_bit_shift(max_bit_shift), new_state(new_state) {
         }
     };
 
@@ -25,8 +25,8 @@ class Ans {
     std::map<char, int> frequencies_quantized;
     int alphabet_size = 0;
     size_t number_of_symbols = 0;
-    int L = 1; // range bounds left
-    int R = 0; // range bound right
+    int L = 1; // number of states in finate state machine (equal to sum of quantized frequencies)
+    int R = 0;
     int r = R + 1;
     int starting_state = 0;
     std::vector<char> symbols_sample_distribution;
@@ -69,8 +69,8 @@ public:
         int mask = L - 1;
 
         for (const std::pair<char, int> symbol_frequency: frequencies_quantized) {
-            char symbol = symbol_frequency.first;
-            int frequency = symbol_frequency.second;
+            const char symbol = symbol_frequency.first;
+            const int frequency = symbol_frequency.second;
             for (int j = 0; j < frequency; j++) {
                 symbols_sample_distribution[i] = symbol;
                 i = (i + step) & mask;
@@ -78,13 +78,13 @@ public:
         }
     }
 
-    void generate_nb_bits() {
+    void create_bit_shifts_row() {
         for (const std::pair<char, int> symbol_frequency: frequencies_quantized) {
             const char symbol = symbol_frequency.first;
             const int frequency = symbol_frequency.second;
-            const int bits = R - static_cast<int>(floor(log2(frequency)));
-            const int nb_val = (bits << r) - (frequency << bits);
-            bit_shifts[symbol] = nb_val;
+            const int max_bit_shift = R - static_cast<int>(floor(log2(frequency))); //wyznacza maksymalną liczbę bitów, o którą można przesunąć stanx tak, aby wciąż należał do[Ls,2Ls-1]
+            const int bit_shift = (max_bit_shift << r) - (frequency << max_bit_shift);
+            bit_shifts[symbol] = bit_shift;
         }
     }
 
@@ -118,39 +118,38 @@ public:
         }
     }
 
-    void generate_decoding_table() {
+    void create_decoding_table() {
         std::map<char, int> frequencies_copy = frequencies_quantized;
         decoding_table.resize(L);
 
         for (int x = 0; x < L; x++) {
             const char symbol = symbols_sample_distribution[x];
-            const int n = frequencies_copy[symbol];
-            const int nb_bits = R - static_cast<int>(floor(log2(n)));
-            const int new_x = (n << nb_bits) - L;
-            auto* t = new DecodingData(symbol, nb_bits, new_x);
-            decoding_table[x] = t;
-
+            const int frequency = frequencies_copy[symbol];
+            const int max_bit_shift = R - static_cast<int>(floor(log2(frequency)));
+            const int new_state = (frequency << max_bit_shift) - L;
+            auto* decoding_data = new DecodingData(symbol, max_bit_shift, new_state);
+            decoding_table[x] = decoding_data;
             frequencies_copy[symbol]++;
         }
     }
 
 
-    static void use_bits(std::vector<bool>& message, int state, int bits) {
-        const int bits_to_extract = (1 << bits) - 1;
-        int least_significant_bits = state & bits_to_extract;
+    static void emit_bits(std::vector<bool>& buffer, int state, int bits) {
+        const int bits_to_extract_mask = (1 << bits) - 1;
+        int least_significant_bits = state & bits_to_extract_mask;
 
         for (int i = 0; i < bits; i++, least_significant_bits >>= 1)
-            message.push_back((least_significant_bits & 1));
+            buffer.push_back((least_significant_bits & 1));
     }
 
-    void write_state(std::vector<bool>& message, int state) const {
+    void write_state(std::vector<bool>& buffer, int state) const {
         for (int i = 0; i < r; i++, state >>= 1)
-            message.push_back((state & 1));
+            buffer.push_back((state & 1));
     }
 
-    std::vector<bool> encode(std::string message) {
-        number_of_symbols = message.size();
-        for (char character: message) {
+    std::vector<bool> encode(std::string text) {
+        number_of_symbols = text.size();
+        for (char character: text) {
             frequencies[character] = frequencies[character] + 1;
         }
 
@@ -165,59 +164,59 @@ public:
 
         quantize_probabilities_fast();
         spread();
-        generate_nb_bits();
+        create_bit_shifts_row();
         create_symbol_intervals();
         generate_encoding_table();
-        generate_decoding_table();
+        create_decoding_table();
 
-        std::vector<bool> result;
+        std::vector<bool> buffer;
         int state = starting_state;
         for (int i = static_cast<int>(number_of_symbols - 1); i >= 0; --i) {
-            char symbol = message[i];
-            int nb_bits = (state + bit_shifts[symbol]) >> r;
-            use_bits(result, state, nb_bits);
-            state = encoding_table[intervals[symbol] + (state >> nb_bits)];
+            char symbol = text[i];
+            int number_of_bits_to_emit = (state + bit_shifts[symbol]) >> r;
+            emit_bits(buffer, state, number_of_bits_to_emit);
+            state = encoding_table[intervals[symbol] + (state >> number_of_bits_to_emit)];
         }
 
-        write_state(result, state);
-        return result;
+        write_state(buffer, state);
+        return buffer;
     }
 
-    int read_decoding_state(std::vector<bool>& message) const {
-        std::vector<bool> state_vec;
+    int read_decoding_state(std::vector<bool>& buffer) const {
+        std::vector<bool> state_buffer;
 
         for (int i = 0; i < r; i++) {
-            state_vec.push_back(message.back());
-            message.pop_back();
+            state_buffer.push_back(buffer.back());
+            buffer.pop_back();
         }
 
-        return bits_to_int(state_vec);
+        return bits_to_int(state_buffer);
     }
 
-    static int update_decoding_state(std::vector<bool>& message, int nb_bits, int new_x) {
-        if (nb_bits > message.size()) {
-            nb_bits = static_cast<int>(message.size()); // Prevent out-of-bounds access
+    static int update_decoding_state(std::vector<bool>& buffer, int nb_bits, int new_x) {
+        if (nb_bits > buffer.size()) {
+            nb_bits = static_cast<int>(buffer.size()); // Prevent out-of-bounds access
         }
 
         int x_add = 0;
         for (int i = 0; i < nb_bits; i++) {
-            x_add = (x_add << 1) | message.back();
-            message.pop_back();
+            x_add = (x_add << 1) | buffer.back();
+            buffer.pop_back();
         }
 
         return new_x + x_add;
     }
 
 
-    std::string decode(std::vector<bool>& message) {
+    std::string decode(std::vector<bool>& buffer) {
         std::string output;
-        int x_start = read_decoding_state(message);
-        DecodingData* t = decoding_table.at(x_start - L);
+        int x_start = read_decoding_state(buffer);
+        DecodingData* decoding_data = decoding_table.at(x_start - L);
 
-        while (!message.empty()) {
-            output.push_back(t->symbol);
-            x_start = update_decoding_state(message, t->bits, t->new_state);
-            t = decoding_table.at(x_start);
+        while (!buffer.empty()) {
+            output.push_back(decoding_data->symbol);
+            x_start = update_decoding_state(buffer, decoding_data->max_bit_shift, decoding_data->new_state);
+            decoding_data = decoding_table.at(x_start);
         }
 
         return output;
