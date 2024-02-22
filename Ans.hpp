@@ -112,8 +112,8 @@ public:
         encoding_table.resize(L);
 
         for (int x = L; x < 2 * L; x++) {
-            const char s = symbols_sample_distribution[x - L];
-            encoding_table[intervals[s] + frequencies_copy[s]++] = x;
+            const char symbol = symbols_sample_distribution[x - L];
+            encoding_table[intervals[symbol] + frequencies_copy[symbol]++] = x;
         }
     }
 
@@ -132,11 +132,11 @@ public:
     }
 
 
-    static void emit_bits(std::vector<bool>& buffer, int state, int bits) {
-        const int bits_to_extract_mask = (1 << bits) - 1;
+    static void emit_bits(std::vector<bool>& buffer, int state, int number_of_bits_to_emit) {
+        const int bits_to_extract_mask = (1 << number_of_bits_to_emit) - 1;
         int least_significant_bits = state & bits_to_extract_mask;
 
-        for (int i = 0; i < bits; i++, least_significant_bits >>= 1)
+        for (int i = 0; i < number_of_bits_to_emit; i++, least_significant_bits >>= 1)
             buffer.push_back((least_significant_bits & 1));
     }
 
@@ -187,13 +187,16 @@ public:
             state_buffer.push_back(buffer.back());
             buffer.pop_back();
         }
-
-        return bits_to_int(state_buffer);
+        int result = 0;
+        for (const bool bit: buffer) {
+            result = (result << 1) | bit;
+        }
+        return result;
     }
 
     static int update_decoding_state(std::vector<bool>& buffer, int bits_to_emit, int new_state) {
         if (bits_to_emit > buffer.size()) {
-            bits_to_emit = static_cast<int>(buffer.size()); // Prevent out-of-bounds access
+            bits_to_emit = static_cast<int>(buffer.size());
         }
 
         int accumulator = 0;
@@ -220,13 +223,6 @@ public:
         return output;
     }
 
-    static int bits_to_int(std::vector<bool>& bits) {
-        int result = 0;
-        for (const bool bit: bits) {
-            result = (result << 1) | bit;
-        }
-        return result;
-    }
 };
 
 
