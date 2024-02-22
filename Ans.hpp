@@ -13,11 +13,11 @@
 class Ans {
     struct DecodingData {
         char symbol;
-        int max_bit_shift;
+        int bits_to_emit;
         int new_state;
 
-        DecodingData(char symbol, int max_bit_shift, int new_state)
-            : symbol(symbol), max_bit_shift(max_bit_shift), new_state(new_state) {
+        DecodingData(char symbol, int bits_to_emit, int new_state)
+            : symbol(symbol), bits_to_emit(bits_to_emit), new_state(new_state) {
         }
     };
 
@@ -113,8 +113,7 @@ public:
 
         for (int x = L; x < 2 * L; x++) {
             const char s = symbols_sample_distribution[x - L];
-            encoding_table[intervals[s] + frequencies_copy[s]] = x;
-            frequencies_copy[s]++;
+            encoding_table[intervals[s] + frequencies_copy[s]++] = x;
         }
     }
 
@@ -124,12 +123,11 @@ public:
 
         for (int x = 0; x < L; x++) {
             const char symbol = symbols_sample_distribution[x];
-            const int frequency = frequencies_copy[symbol];
+            const int frequency = frequencies_copy[symbol]++;
             const int max_bit_shift = R - static_cast<int>(floor(log2(frequency)));
             const int new_state = (frequency << max_bit_shift) - L;
             auto* decoding_data = new DecodingData(symbol, max_bit_shift, new_state);
             decoding_table[x] = decoding_data;
-            frequencies_copy[symbol]++;
         }
     }
 
@@ -193,18 +191,18 @@ public:
         return bits_to_int(state_buffer);
     }
 
-    static int update_decoding_state(std::vector<bool>& buffer, int nb_bits, int new_x) {
-        if (nb_bits > buffer.size()) {
-            nb_bits = static_cast<int>(buffer.size()); // Prevent out-of-bounds access
+    static int update_decoding_state(std::vector<bool>& buffer, int bits_to_emit, int new_state) {
+        if (bits_to_emit > buffer.size()) {
+            bits_to_emit = static_cast<int>(buffer.size()); // Prevent out-of-bounds access
         }
 
-        int x_add = 0;
-        for (int i = 0; i < nb_bits; i++) {
-            x_add = (x_add << 1) | buffer.back();
+        int accumulator = 0;
+        for (int i = 0; i < bits_to_emit; i++) {
+            accumulator = (accumulator << 1) | buffer.back();
             buffer.pop_back();
         }
 
-        return new_x + x_add;
+        return new_state + accumulator;
     }
 
 
@@ -215,7 +213,7 @@ public:
 
         while (!buffer.empty()) {
             output.push_back(decoding_data->symbol);
-            x_start = update_decoding_state(buffer, decoding_data->max_bit_shift, decoding_data->new_state);
+            x_start = update_decoding_state(buffer, decoding_data->bits_to_emit, decoding_data->new_state);
             decoding_data = decoding_table.at(x_start);
         }
 
