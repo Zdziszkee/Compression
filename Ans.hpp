@@ -38,26 +38,26 @@ class Ans {
 public:
     //stolen from jarek duda
     void quantize_probabilities_fast() {
-        int used = 0;
-        char max_proba_symbol;
-        double max_proba = 0;
+        int accumulator = 0;
+        char symbol_with_biggest_probability;
+        double biggest_probability = 0;
         for (const std::pair<char, int> symbol_frequency: frequencies) {
             std::cout << symbol_frequency.first;
             char symbol = symbol_frequency.first;
-            double proba = (double) symbol_frequency.second / (double) number_of_symbols;
-            frequencies_quantized[symbol] = std::round(L * proba);
+            double probability = (double) symbol_frequency.second / (double) number_of_symbols;
+            frequencies_quantized[symbol] = std::round(L * probability);
 
             if (!frequencies_quantized[symbol])
                 frequencies_quantized[symbol]++;
-            used += frequencies_quantized[symbol];
+            accumulator += frequencies_quantized[symbol];
 
-            if (proba > max_proba) {
-                max_proba = proba;
-                max_proba_symbol = symbol;
+            if (probability > biggest_probability) {
+                biggest_probability = probability;
+                symbol_with_biggest_probability = symbol;
             }
         }
         std::cout << std::endl;
-        frequencies_quantized[max_proba_symbol] += L - used;
+        frequencies_quantized[symbol_with_biggest_probability] += L - accumulator;
     }
 
     //stolen from jarek duda
@@ -65,8 +65,8 @@ public:
         symbols_sample_distribution.resize(L);
         starting_state = L;
         int i = 0;
-        int step = (L >> 1) + (L >> 3) + 3;
-        int mask = L - 1;
+        const int step = (L >> 1) + (L >> 3) + 3;
+        const int mask = L - 1;
 
         for (const std::pair<char, int> symbol_frequency: frequencies_quantized) {
             const char symbol = symbol_frequency.first;
@@ -82,12 +82,16 @@ public:
         for (const std::pair<char, int> symbol_frequency: frequencies_quantized) {
             const char symbol = symbol_frequency.first;
             const int frequency = symbol_frequency.second;
-            const int max_bit_shift = R - static_cast<int>(floor(log2(frequency))); //wyznacza maksymalną liczbę bitów, o którą można przesunąć stanx tak, aby wciąż należał do[Ls,2Ls-1]
+            const int max_bit_shift = R - static_cast<int>(floor(log2(frequency))); //wyznacza maksymalną liczbę bitów, o którą można przesunąć stan x tak, aby wciąż należał do[Ls,2Ls-1]
             const int bit_shift = (max_bit_shift << r) - (frequency << max_bit_shift);
             bit_shifts[symbol] = bit_shift;
         }
     }
 
+    /**
+     *  start[s] = −Ls + ∑ Ls′
+     *                  s′<s
+    */
     void create_symbol_intervals() {
         int size = static_cast<int>(frequencies.size());
         auto outer_iterator = frequencies_quantized.rbegin();
@@ -107,7 +111,7 @@ public:
         }
     }
 
-    void generate_encoding_table() {
+    void create_encoding_table() {
         std::map<char, int> frequencies_copy = frequencies_quantized;
         encoding_table.resize(L);
 
@@ -164,7 +168,7 @@ public:
         spread();
         create_bit_shifts_row();
         create_symbol_intervals();
-        generate_encoding_table();
+        create_encoding_table();
         create_decoding_table();
 
         std::vector<bool> buffer;
