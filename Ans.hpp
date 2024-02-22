@@ -13,18 +13,18 @@
 class Ans {
     struct DecodingData {
         char symbol;
-        int bits_to_emit;
+        int number_of_bits_to_emit;
         int new_state;
 
-        DecodingData(char symbol, int bits_to_emit, int new_state)
-            : symbol(symbol), bits_to_emit(bits_to_emit), new_state(new_state) {
+        DecodingData(char symbol, int number_of_bits_to_emit, int new_state)
+            : symbol(symbol), number_of_bits_to_emit(number_of_bits_to_emit), new_state(new_state) {
         }
     };
 
     std::map<char, int> frequencies;
     std::map<char, int> frequencies_quantized;
     int alphabet_size = 0;
-    size_t number_of_symbols = 0;
+    int number_of_symbols = 0;
     int L = 1; // number of states in finate state machine (equal to sum of quantized frequencies)
     int R = 0;
     int r = R + 1;
@@ -146,7 +146,7 @@ public:
     }
 
     std::vector<bool> encode(std::string text) {
-        number_of_symbols = text.size();
+        number_of_symbols = static_cast<int>(text.size());
         for (char character: text) {
             frequencies[character] = frequencies[character] + 1;
         }
@@ -169,10 +169,14 @@ public:
 
         std::vector<bool> buffer;
         int state = starting_state;
-        for (int i = static_cast<int>(number_of_symbols - 1); i >= 0; --i) {
+        for (int i = number_of_symbols - 1; i >= 0; --i) {
             char symbol = text[i];
             int number_of_bits_to_emit = (state + bit_shifts[symbol]) >> r;
             emit_bits(buffer, state, number_of_bits_to_emit);
+            /** Aktualny stan x działa jak bufor,
+             *  trzymając między [R, R + 1) bitów informacji,
+             *  do którego dokładamy informację o nowym symbolu.
+             */
             state = encoding_table[intervals[symbol] + (state >> number_of_bits_to_emit)];
         }
 
@@ -189,18 +193,18 @@ public:
         }
         int result = 0;
         for (const bool bit: buffer) {
-            result = (result << 1) | bit;
+            result = result << 1 | bit;
         }
         return result;
     }
 
-    static int update_decoding_state(std::vector<bool>& buffer, int bits_to_emit, int new_state) {
-        if (bits_to_emit > buffer.size()) {
-            bits_to_emit = static_cast<int>(buffer.size());
+    static int decoding_step(std::vector<bool>& buffer, int number_of_bits_to_emit, int new_state) {
+        if (number_of_bits_to_emit > buffer.size()) {
+            number_of_bits_to_emit = static_cast<int>(buffer.size());
         }
 
         int accumulator = 0;
-        for (int i = 0; i < bits_to_emit; i++) {
+        for (int i = 0; i < number_of_bits_to_emit; i++) {
             accumulator = (accumulator << 1) | buffer.back();
             buffer.pop_back();
         }
@@ -209,15 +213,15 @@ public:
     }
 
 
-    std::string decode(std::vector<bool>& buffer) {
+    std::string decode(std::vector<bool>& buffer) const{
         std::string output;
-        int x_start = read_decoding_state(buffer);
-        DecodingData* decoding_data = decoding_table.at(x_start - L);
+        int starting_state = read_decoding_state(buffer);
+        DecodingData* decoding_data = decoding_table.at(starting_state - L);
 
         while (!buffer.empty()) {
             output.push_back(decoding_data->symbol);
-            x_start = update_decoding_state(buffer, decoding_data->bits_to_emit, decoding_data->new_state);
-            decoding_data = decoding_table.at(x_start);
+            starting_state = decoding_step(buffer, decoding_data->number_of_bits_to_emit, decoding_data->new_state);
+            decoding_data = decoding_table.at(starting_state);
         }
 
         return output;
