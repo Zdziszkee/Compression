@@ -27,7 +27,7 @@ class Ans {
     size_t number_of_symbols = 0;
     int L = 1; // range bounds left
     int R = 0; // range bound right
-    int r = R +1;
+    int r = R + 1;
     int starting_state = 0;
     std::vector<char> symbols_sample_distribution;
     std::map<char, int> bit_shifts;
@@ -60,7 +60,7 @@ public:
         frequencies_quantized[max_proba_symbol] += L - used;
     }
 
-//stolen from jarek duda
+    //stolen from jarek duda
     void spread() {
         symbols_sample_distribution.resize(L);
         starting_state = L;
@@ -89,18 +89,17 @@ public:
     }
 
     void create_symbol_intervals() {
-        int vocab_size = static_cast<int>(frequencies.size());
-
+        int size = static_cast<int>(frequencies.size());
         auto outer_iterator = frequencies_quantized.rbegin();
-        for (int i = vocab_size - 1; i >= 0; i--) {
+        for (int i = size - 1; i >= 0; i--) {
             const char symbol = outer_iterator->first;
             const int frequency = frequencies_quantized[symbol];
             int start = -1 * frequency;
             auto inner_iterator = frequencies_quantized.begin();
             for (int j = 0; j < i; j++) {
                 char symbol_prim = inner_iterator->first;
-                const int frequency_prim = frequencies_quantized[symbol_prim];
-                start += frequency_prim;
+                const int second_frequency = frequencies_quantized[symbol_prim];
+                start += second_frequency;
                 ++inner_iterator;
             }
             intervals[symbol] = start;
@@ -109,38 +108,38 @@ public:
     }
 
     void generate_encoding_table() {
-        std::map<char, int> next = frequencies_quantized;
+        std::map<char, int> frequencies_copy = frequencies_quantized;
         encoding_table.resize(L);
 
         for (int x = L; x < 2 * L; x++) {
             const char s = symbols_sample_distribution[x - L];
-            encoding_table[intervals[s] + (next[s])++] = x;
+            encoding_table[intervals[s] + frequencies_copy[s]] = x;
+            frequencies_copy[s]++;
         }
     }
 
     void generate_decoding_table() {
-        std::map<char, int> next = frequencies_quantized;
+        std::map<char, int> frequencies_copy = frequencies_quantized;
         decoding_table.resize(L);
 
         for (int x = 0; x < L; x++) {
-             const char symbol = symbols_sample_distribution[x];
-            const int n = next[symbol]++;
+            const char symbol = symbols_sample_distribution[x];
+            const int n = frequencies_copy[symbol];
             const int nb_bits = R - static_cast<int>(floor(log2(n)));
             const int new_x = (n << nb_bits) - L;
             auto* t = new DecodingData(symbol, nb_bits, new_x);
             decoding_table[x] = t;
+
+            frequencies_copy[symbol]++;
         }
     }
 
-    static int get_extractor(int exp) {
-        return (1 << exp) - 1;
-    }
 
-    static void use_bits(std::vector<bool>& message, int state, int nb_bits) {
-       const int n_to_extract = get_extractor(nb_bits);
-        int least_significant_bits = state & n_to_extract;
+    static void use_bits(std::vector<bool>& message, int state, int bits) {
+        const int bits_to_extract = (1 << bits) - 1;
+        int least_significant_bits = state & bits_to_extract;
 
-        for (int i = 0; i < nb_bits; i++, least_significant_bits >>= 1)
+        for (int i = 0; i < bits; i++, least_significant_bits >>= 1)
             message.push_back((least_significant_bits & 1));
     }
 
@@ -192,7 +191,7 @@ public:
             message.pop_back();
         }
 
-      return  bits_to_int(state_vec);
+        return bits_to_int(state_vec);
     }
 
     static int update_decoding_state(std::vector<bool>& message, int nb_bits, int new_x) {
@@ -208,7 +207,6 @@ public:
 
         return new_x + x_add;
     }
-
 
 
     std::string decode(std::vector<bool>& message) {
