@@ -2,7 +2,7 @@
 #include <fstream>
 #include <vector>
 #include "Ans.hpp"
-
+#include <chrono>
 
 
 int main(int arguments_size, char** arguments) {
@@ -30,11 +30,18 @@ int main(int arguments_size, char** arguments) {
 
     Ans ans;
 
-
+    auto compress_start = std::chrono::high_resolution_clock::now();
     std::vector<bool> compressed = ans.encode(file_contents);
+    auto compress_end = std::chrono::high_resolution_clock::now();
+    std::cout << "Compress time: " << (compress_end - compress_start).count() << " nanoseconds\n";
+
     size_t compressed_size = compressed.size();
     std::cout << "Encoded: " << compressed_size << std::endl;
+    auto decompress_start = std::chrono::high_resolution_clock::now();
     auto decompress = ans.decode(compressed);
+    auto decompress_end = std::chrono::high_resolution_clock::now();
+    std::cout << "Decompress time: " << (decompress_end - decompress_start).count() << " nanoseconds\n";
+
     std::cout<<decompress<<std::endl;
     auto decompressed_size = (file_contents.size() * 8);
     std::cout << "Decoded: " << decompressed_size << std::endl;
