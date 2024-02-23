@@ -25,7 +25,7 @@ class Ans {
     std::map<char, int> frequencies_quantized;
     int alphabet_size = 0;
     int number_of_symbols = 0;
-    int L = 1; // number of states in finate state machine (equal to sum of quantized frequencies)
+    int L = 1; // number of states in finate state machine
     int R = 0;
     int r = R + 1;
     int starting_state = 0;
