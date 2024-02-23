@@ -196,7 +196,7 @@ public:
             buffer.pop_back();
         }
         int result = 0;
-        for (const bool bit: buffer) {
+        for (const bool bit: state_buffer) {
             result = result << 1 | bit;
         }
         return result;
